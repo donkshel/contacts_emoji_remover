@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>VCF Cleaner</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c27;
+    --surface3: #22222f;
+    --border: rgba(255,255,255,0.07);
+    --border-hover: rgba(255,255,255,0.15);
+    --accent: #7c6af7;
+    --accent2: #a78bfa;
+    --accent-glow: rgba(124,106,247,0.2);
+    --green: #34d399;
+    --green-dim: rgba(52,211,153,0.08);
+    --green-border: rgba(52,211,153,0.2);
+    --yellow: #fbbf24;
+    --yellow-dim: rgba(251,191,36,0.08);
+    --yellow-border: rgba(251,191,36,0.2);
+    --text: #f0eeff;
+    --text2: #9896b0;
+    --text3: #5c5a74;
+    --danger: #f87171;
+    --danger-dim: rgba(248,113,113,0.1);
+  }
+
+  html, body { height: 100%; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: clamp(1.2rem, 5vw, 2.5rem) clamp(1rem, 4vw, 1.5rem);
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -20%; left: 50%;
+    transform: translateX(-50%);
+    width: min(600px, 120vw); height: min(600px, 120vw);
+    background: radial-gradient(ellipse, rgba(124,106,247,0.09) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .container {
+    width: 100%; max-width: 560px;
+    position: relative; z-index: 1;
+    animation: fadeUp 0.45s ease both;
+    padding-bottom: 3rem;
+  }
+
+  .header { text-align: center; margin-bottom: clamp(1.4rem, 5vw, 2.2rem); }
+
+  .logo {
+    display: inline-flex; align-items: center; gap: 10px; margin-bottom: 8px;
+  }
+
+  .logo-icon {
+    width: clamp(34px, 8vw, 40px); height: clamp(34px, 8vw, 40px);
+    background: linear-gradient(135deg, var(--accent), #c084fc);
+    border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+
+  .logo-text { font-size: clamp(17px, 4.5vw, 21px); font-weight: 700; letter-spacing: -0.5px; }
+
+  .tagline { font-size: clamp(11px, 3vw, 12px); color: var(--text3); font-family: 'DM Mono', monospace; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: clamp(14px, 4vw, 20px); padding: clamp(1.2rem, 5vw, 1.8rem);
+    position: relative; overflow: hidden; margin-bottom: 12px;
+  }
+
+  .card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(124,106,247,0.4), transparent);
+  }
+
+  .drop-zone {
+    border: 1.5px dashed var(--border-hover); border-radius: clamp(10px, 3vw, 13px);
+    padding: clamp(1.8rem, 7vw, 2.8rem) 1.5rem; text-align: center; cursor: pointer;
+    transition: all 0.2s ease; background: var(--surface2);
+    -webkit-tap-highlight-color: transparent; user-select: none;
+  }
+
+  .drop-zone:active, .drop-zone.drag-over {
+    border-color: var(--accent); background: rgba(124,106,247,0.06);
+    box-shadow: 0 0 0 4px var(--accent-glow);
+  }
+
+  @media (hover: hover) {
+    .drop-zone:hover {
+      border-color: var(--accent); background: rgba(124,106,247,0.05);
+      box-shadow: 0 0 0 4px var(--accent-glow);
+    }
+    .drop-zone:hover .drop-icon { transform: translateY(-3px); }
+  }
+
+  .drop-icon {
+    width: clamp(42px, 11vw, 52px); height: clamp(42px, 11vw, 52px);
+    background: rgba(124,106,247,0.12); border-radius: 13px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 12px; transition: transform 0.2s;
+  }
+
+  .drop-title { font-size: clamp(13px, 3.8vw, 15px); font-weight: 600; margin-bottom: 4px; }
+
+  .drop-sub { font-size: clamp(11px, 3vw, 12px); color: var(--text3); font-family: 'DM Mono', monospace; }
+
+  .file-badge {
+    display: none; margin-top: 12px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 9px 13px; align-items: center; gap: 10px;
+  }
+
+  .file-badge.visible { display: flex; }
+
+  .file-badge-icon {
+    width: 30px; height: 30px; background: rgba(124,106,247,0.12);
+    border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+
+  .file-badge-name {
+    font-size: clamp(12px, 3.2vw, 13px); font-weight: 500;
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+  }
+
+  .file-badge-size {
+    font-size: clamp(10px, 2.8vw, 11px); color: var(--text3);
+    font-family: 'DM Mono', monospace; flex-shrink: 0;
+  }
+
+  .section-label {
+    font-size: clamp(10px, 2.8vw, 11px); font-family: 'DM Mono', monospace;
+    color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  }
+
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .preview-wrap { display: none; margin-top: 14px; animation: fadeUp 0.3s ease both; }
+  .preview-wrap.visible { display: block; }
+
+  .preview-scroll {
+    max-height: 260px; overflow-y: auto; border-radius: 10px;
+    border: 1px solid var(--border);
+    scrollbar-width: thin; scrollbar-color: var(--surface3) transparent;
+  }
+
+  .preview-scroll::-webkit-scrollbar { width: 4px; }
+  .preview-scroll::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 4px; }
+
+  .preview-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 13px; border-bottom: 1px solid var(--border);
+    background: var(--surface2); transition: background 0.15s;
+  }
+
+  .preview-row:last-child { border-bottom: none; }
+  .preview-row:first-child { border-radius: 10px 10px 0 0; }
+  .preview-row:last-child  { border-radius: 0 0 10px 10px; }
+  .preview-row:only-child  { border-radius: 10px; }
+
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; flex-shrink: 0;
+    background: rgba(124,106,247,0.14); color: var(--accent2);
+  }
+
+  .preview-name {
+    font-size: clamp(12px, 3.2vw, 13px); color: var(--text);
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .has-emoji {
+    font-size: 10px; font-family: 'DM Mono', monospace;
+    background: var(--yellow-dim); color: var(--yellow);
+    border: 1px solid var(--yellow-border); border-radius: 5px;
+    padding: 2px 7px; flex-shrink: 0;
+  }
+
+  .after-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 13px; border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .after-row:last-child { border-bottom: none; }
+  .after-row:first-child { border-radius: 10px 10px 0 0; }
+  .after-row:last-child  { border-radius: 0 0 10px 10px; }
+  .after-row:only-child  { border-radius: 10px; }
+
+  .name-before {
+    font-size: clamp(11px, 3vw, 12px); color: var(--text3);
+    text-decoration: line-through; font-family: 'DM Mono', monospace;
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .arrow-icon { flex-shrink: 0; color: var(--text3); }
+
+  .name-after {
+    font-size: clamp(12px, 3.2vw, 13px); color: var(--green);
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right;
+  }
+
+  .name-unchanged {
+    font-size: clamp(12px, 3.2vw, 13px); color: var(--text2);
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .badge-clean {
+    font-size: 10px; font-family: 'DM Mono', monospace;
+    background: var(--green-dim); color: var(--green);
+    border: 1px solid var(--green-border); border-radius: 5px;
+    padding: 2px 7px; flex-shrink: 0;
+  }
+
+  .stats-grid {
+    display: none; grid-template-columns: repeat(3, 1fr);
+    gap: clamp(6px, 2vw, 10px); margin-top: 12px;
+  }
+
+  .stats-grid.visible { display: grid; }
+
+  .stat-box {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: clamp(8px, 2.5vw, 11px);
+    padding: clamp(8px, 2.5vw, 13px) clamp(6px, 2vw, 10px); text-align: center;
+  }
+
+  .stat-label {
+    font-size: clamp(9px, 2.5vw, 10px); color: var(--text3);
+    font-family: 'DM Mono', monospace; text-transform: uppercase;
+    letter-spacing: 0.6px; margin-bottom: 5px;
+  }
+
+  .stat-val { font-size: clamp(18px, 5.5vw, 23px); font-weight: 700; }
+  .stat-val.green  { color: var(--green); }
+  .stat-val.yellow { color: var(--yellow); }
+
+  .btn {
+    display: block; width: 100%; margin-top: 12px;
+    padding: clamp(11px, 3.5vw, 13px);
+    font-family: 'Syne', sans-serif; font-size: clamp(13px, 3.8vw, 14px);
+    font-weight: 600; border: none; border-radius: clamp(9px, 2.5vw, 12px);
+    cursor: pointer; transition: all 0.18s ease; letter-spacing: 0.3px;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+
+  .btn-clean    { background: linear-gradient(135deg, var(--accent), #9b87f5); color: #fff; }
+  .btn-download { background: linear-gradient(135deg, #059669, var(--green)); color: #fff; }
+
+  .btn:active { transform: scale(0.97); opacity: 0.88; }
+
+  @media (hover: hover) { .btn:hover { opacity: 0.9; } }
+
+  .btn:disabled {
+    background: var(--surface2); color: var(--text3);
+    cursor: not-allowed; transform: none !important; opacity: 1 !important;
+  }
+
+  .error-box {
+    display: none; margin-top: 10px; background: var(--danger-dim);
+    border: 1px solid rgba(248,113,113,0.2); border-radius: 9px;
+    padding: 10px 13px; font-size: clamp(11px, 3vw, 12px);
+    color: var(--danger); font-family: 'DM Mono', monospace;
+  }
+
+  .error-box.visible { display: block; }
+
+  .footer {
+    text-align: center; margin-top: clamp(1rem, 3.5vw, 1.4rem);
+    font-size: clamp(10px, 2.8vw, 11px); color: var(--text3); font-family: 'DM Mono', monospace;
+  }
+
+  .footer span { color: var(--text2); }
+
+  .more-note {
+    text-align: center; font-size: clamp(10px, 2.8vw, 11px); color: var(--text3);
+    font-family: 'DM Mono', monospace; padding: 8px;
+    border-top: 1px solid var(--border); background: var(--surface2);
+    border-radius: 0 0 10px 10px;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 360px) {
+    .card { padding: 1rem; }
+    .drop-zone { padding: 1.6rem 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <span class="logo-text">VCF Cleaner</span>
+    </div>
+    <p class="tagline">strips emojis from contact names</p>
+  </div>
+
+  <div class="card" id="upload-card">
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <div class="drop-icon">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <p class="drop-title">Tap to select your .vcf file</p>
+      <p class="drop-sub">or drag &amp; drop on desktop</p>
+      <input type="file" id="file-input" accept=".vcf" style="display:none;" />
+    </div>
+
+    <div class="file-badge" id="file-badge">
+      <div class="file-badge-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+      </div>
+      <span class="file-badge-name" id="file-name"></span>
+      <span class="file-badge-size" id="file-size"></span>
+    </div>
+
+    <div class="preview-wrap" id="before-wrap">
+      <div class="section-label">preview — before cleaning</div>
+      <div class="preview-scroll" id="before-list"></div>
+    </div>
+
+    <div class="error-box" id="error-box"></div>
+
+    <button class="btn btn-clean" id="clean-btn" disabled>Clean contacts</button>
+  </div>
+
+  <div class="card" id="after-card" style="display:none;">
+    <div class="stats-grid visible" id="stats-grid">
+      <div class="stat-box">
+        <div class="stat-label">Total</div>
+        <div class="stat-val" id="stat-total">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Cleaned</div>
+        <div class="stat-val green" id="stat-cleaned">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Unchanged</div>
+        <div class="stat-val yellow" id="stat-skipped">—</div>
+      </div>
+    </div>
+
+    <div class="preview-wrap visible" id="after-wrap" style="margin-top:14px;">
+      <div class="section-label">preview — after cleaning</div>
+      <div class="preview-scroll" id="after-list"></div>
+    </div>
+
+    <button class="btn btn-download" id="download-btn">Download cleaned file</button>
+  </div>
+
+  <p class="footer">processed locally &mdash; <span>your contacts never leave your device</span></p>
+</div>
+
+<script>
+  const fileInput   = document.getElementById('file-input');
+  const dropZone    = document.getElementById('drop-zone');
+  const fileBadge   = document.getElementById('file-badge');
+  const fileName    = document.getElementById('file-name');
+  const fileSize    = document.getElementById('file-size');
+  const cleanBtn    = document.getElementById('clean-btn');
+  const downloadBtn = document.getElementById('download-btn');
+  const errorBox    = document.getElementById('error-box');
+  const beforeWrap  = document.getElementById('before-wrap');
+  const beforeList  = document.getElementById('before-list');
+  const afterCard   = document.getElementById('after-card');
+  const afterList   = document.getElementById('after-list');
+
+  let selectedFile   = null;
+  let cleanedContent = null;
+
+  /* ── Utilities ── */
+
+  function fmt(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  /* ── Quoted-Printable decoder ── */
+  function decodeQP(str) {
+    // Join soft-wrapped lines (line ending with =)
+    str = str.replace(/=\r?\n/g, '');
+    // Decode =XX hex sequences to bytes, then interpret as UTF-8
+    const bytes = [];
+    let i = 0;
+    while (i < str.length) {
+      if (str[i] === '=' && i + 2 < str.length) {
+        const hex = str.slice(i + 1, i + 3);
+        if (/^[0-9A-Fa-f]{2}$/.test(hex)) {
+          bytes.push(parseInt(hex, 16));
+          i += 3;
+          continue;
+        }
+      }
+      bytes.push(str.charCodeAt(i));
+      i++;
+    }
+    try {
+      return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
+    } catch (e) {
+      return str;
+    }
+  }
+
+  /* ── Emoji helpers ── */
+  const EMOJI_RE = () => /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{10000}-\u{10FFFF}]+/gu;
+
+  function removeEmojis(t) { return t.replace(EMOJI_RE(), '').trim(); }
+  function hasEmoji(t)     { return EMOJI_RE().test(t); }
+
+  /* ── Avatar initials ── */
+  function initials(name) {
+    const parts = name.replace(/[^\p{L}\s]/gu, '').trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return (parts[0] || '?').slice(0, 2).toUpperCase();
+  }
+
+  /* ── Parse VCF: returns array of { raw, decoded } FN values ── */
+  function parseFNValues(text) {
+    const results = [];
+    // Handle multi-line QP values (lines ending with = are continued)
+    const lines = text.split(/\r?\n/);
+    let i = 0;
+    while (i < lines.length) {
+      let line = lines[i];
+      // Check if FN line (with any parameters)
+      if (/^FN[;:]/i.test(line)) {
+        const isQP = /ENCODING=QUOTED-PRINTABLE/i.test(line);
+        // Collect soft-wrapped QP continuation lines
+        if (isQP) {
+          while (line.endsWith('=') && i + 1 < lines.length) {
+            i++;
+            line += lines[i];
+          }
+        }
+        const colon = line.indexOf(':');
+        const raw   = colon >= 0 ? line.slice(colon + 1) : '';
+        const decoded = isQP ? decodeQP(raw) : raw.trim();
+        if (decoded) results.push({ raw, decoded, isQP });
+      }
+      i++;
+    }
+    return results;
+  }
+
+  /* ── Process full VCF text: decode QP, strip emojis, re-encode as plain UTF-8 ── */
+  function processVCF(text) {
+    const lines = text.split(/\r?\n/);
+    let total = 0, cleaned = 0, skipped = 0;
+    const pairs = [];
+    const out   = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      let line = lines[i];
+
+      if (/^BEGIN:VCARD/i.test(line)) total++;
+
+      if (/^FN[;:]/i.test(line)) {
+        const isQP = /ENCODING=QUOTED-PRINTABLE/i.test(line);
+
+        // Collect soft-wrapped QP continuation
+        if (isQP) {
+          while (line.endsWith('=') && i + 1 < lines.length) {
+            i++;
+            line += lines[i];
+          }
+        }
+
+        const colon  = line.indexOf(':');
+        const prefix = line.slice(0, colon);      // e.g. "FN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE"
+        const raw    = line.slice(colon + 1);
+
+        const decoded = isQP ? decodeQP(raw) : raw.trim();
+        const cleaned_name = removeEmojis(decoded);
+
+        pairs.push({ before: decoded, after: cleaned_name });
+
+        if (cleaned_name !== decoded) cleaned++;
+        else skipped++;
+
+        // Always output as plain UTF-8 FN (drop QP encoding declaration)
+        out.push('FN:' + cleaned_name);
+        i++;
+        continue;
+      }
+
+      // Also handle N field similarly
+      if (/^N[;:]/i.test(line)) {
+        const isQP = /ENCODING=QUOTED-PRINTABLE/i.test(line);
+        if (isQP) {
+          while (line.endsWith('=') && i + 1 < lines.length) {
+            i++;
+            line += lines[i];
+          }
+        }
+        const colon = line.indexOf(':');
+        const raw   = line.slice(colon + 1);
+        const decoded = isQP ? decodeQP(raw) : raw.trim();
+        const cleaned_n = removeEmojis(decoded);
+        out.push('N:' + cleaned_n);
+        i++;
+        continue;
+      }
+
+      out.push(line);
+      i++;
+    }
+
+    return { output: out.join('\n'), total, cleaned, skipped, pairs };
+  }
+
+  /* ── Render before preview ── */
+  function renderBefore(fnValues) {
+    const preview = fnValues.slice(0, 10);
+    let html = '';
+    preview.forEach(({ decoded }) => {
+      const emoji = hasEmoji(decoded);
+      const ini   = initials(decoded);
+      html += `<div class="preview-row">
+        <div class="avatar">${escapeHtml(ini)}</div>
+        <span class="preview-name">${escapeHtml(decoded)}</span>
+        ${emoji ? '<span class="has-emoji">has emoji</span>' : ''}
+      </div>`;
+    });
+    if (fnValues.length > 10) {
+      html += `<div class="more-note">+ ${fnValues.length - 10} more contact${fnValues.length - 10 > 1 ? 's' : ''} not shown</div>`;
+    }
+    beforeList.innerHTML = html;
+    beforeWrap.classList.add('visible');
+  }
+
+  /* ── Render after preview ── */
+  function renderAfter(pairs) {
+    const preview = pairs.slice(0, 10);
+    let html = '';
+    preview.forEach(({ before, after }) => {
+      const changed = before !== after;
+      if (changed) {
+        html += `<div class="after-row">
+          <span class="name-before">${escapeHtml(before)}</span>
+          <svg class="arrow-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          <span class="name-after">${escapeHtml(after)}</span>
+          <span class="badge-clean">cleaned</span>
+        </div>`;
+      } else {
+        html += `<div class="after-row">
+          <span class="name-unchanged">${escapeHtml(before)}</span>
+        </div>`;
+      }
+    });
+    if (pairs.length > 10) {
+      html += `<div class="more-note">+ ${pairs.length - 10} more contact${pairs.length - 10 > 1 ? 's' : ''} not shown</div>`;
+    }
+    afterList.innerHTML = html;
+  }
+
+  /* ── File loading ── */
+  function setFile(file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.vcf')) {
+      showErr('Please select a .vcf file.'); return;
+    }
+    hideErr();
+    selectedFile   = file;
+    cleanedContent = null;
+    fileName.textContent = file.name;
+    fileSize.textContent = fmt(file.size);
+    fileBadge.classList.add('visible');
+    afterCard.style.display = 'none';
+
+    const reader = new FileReader();
+    reader.onload = e => {
+      const fnValues = parseFNValues(e.target.result);
+      renderBefore(fnValues);
+      cleanBtn.disabled = false;
+    };
+    reader.onerror = () => showErr('Could not read file.');
+    reader.readAsText(file, 'utf-8');
+  }
+
+  function showErr(msg) { errorBox.textContent = msg; errorBox.classList.add('visible'); }
+  function hideErr()    { errorBox.classList.remove('visible'); }
+
+  /* ── Events ── */
+  fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    setFile(e.dataTransfer.files[0]);
+  });
+
+  cleanBtn.addEventListener('click', () => {
+    if (!selectedFile) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const { output, total, cleaned, skipped, pairs } = processVCF(e.target.result);
+      cleanedContent = output;
+
+      document.getElementById('stat-total').textContent   = total;
+      document.getElementById('stat-cleaned').textContent = cleaned;
+      document.getElementById('stat-skipped').textContent = skipped;
+
+      renderAfter(pairs);
+      afterCard.style.display = 'block';
+      afterCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    reader.onerror = () => showErr('Could not read file. Try again.');
+    reader.readAsText(selectedFile, 'utf-8');
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!cleanedContent) return;
+    const blob = new Blob([cleanedContent], { type: 'text/vcard' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = selectedFile.name.replace(/\.vcf$/i, '') + '_cleaned.vcf';
+    a.click();
+    URL.revokeObjectURL(url);
+    downloadBtn.textContent = 'Downloaded!';
+    setTimeout(() => { downloadBtn.textContent = 'Download cleaned file'; }, 2500);
+  });
+</script>
+</body>
+</html>
